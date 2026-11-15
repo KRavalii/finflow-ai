@@ -16,6 +16,41 @@ Historical conversion rules are unchanged: transaction-date rates, or a prior
 published rate within seven days; round each conversion before aggregation.
 Missing required rates hide totals. Latest valuation is a separate, explicit choice.
 
+## End-to-End Application Architecture
+
+This vertical overview shows the implemented communication paths. See
+[all 18 detailed application-flow diagrams](docs/APPLICATION_FLOW.md) for the
+end-to-end flowcharts, request-response sequences, database diagram, endpoint
+contracts, calculations, and failure paths.
+
+```mermaid
+flowchart TB
+  Browser["Browser: React App and preference providers"]
+  Pages["Profiles / Transactions / Dashboard<br/>Analytics / AI Assistant"]
+  HTTP["Axios REST API<br/>Vite proxy, same origin, or HTTPS backend"]
+  Gate["FastAPI: CORS, demo write guard and validation"]
+  CRUD["Profile / transaction CRUD"]
+  Summary["Shared financial_summary<br/>and local assistant rules"]
+  DB[("PostgreSQL<br/>profiles and transactions")]
+  FX["ExchangeRates<br/>Identity, cache or historical/latest lookup"]
+  Remote["HTTPS: api.frankfurter.dev<br/>Currency pair and optional date only"]
+  Reply["JSON success/error to frontend<br/>Demo mutations return 403"]
+  Browser --> Pages --> HTTP --> Gate
+  Gate --> CRUD
+  Gate --> Summary
+  CRUD --> DB
+  Summary --> DB
+  Summary --> FX
+  CRUD -.->|List enrichment| FX
+  FX -->|Cache miss| Remote
+  Gate -->|Rejected or operational response| Reply
+  CRUD --> Reply
+  Summary --> Reply
+```
+
+Public demo mode blocks writes server-side. Local mode supports editing. The
+assistant is rule-based and read-only; there is no external LLM integration.
+
 ## Existing local checkout
 
 Use Python 3.13, Node 22.15.1+ on the Node 22 line (or Node 24), and PostgreSQL 17.
