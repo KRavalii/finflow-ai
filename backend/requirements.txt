@@ -1,0 +1,2 @@
+# Use the exact runtime dependency snapshot for every install entry point.
+-r requirements.lock

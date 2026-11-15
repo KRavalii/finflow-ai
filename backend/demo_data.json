@@ -1,0 +1,23 @@
+{
+  "notice": "Entirely fictional portfolio fixtures. Never imported into an existing database.",
+  "profiles": ["Demo side project", "Demo archived project"],
+  "transactions": [
+    {"profile": 0, "description": "Fictional salary", "amount": "4200.00", "category": "Salary", "transaction_type": "income", "transaction_date": "2026-08-03", "currency": "USD"},
+    {"profile": 0, "description": "Fictional apartment rent", "amount": "1250.00", "category": "Housing", "transaction_type": "expense", "transaction_date": "2026-08-04", "currency": "USD"},
+    {"profile": 0, "description": "Fictional groceries", "amount": "185.40", "category": "Food", "transaction_type": "expense", "transaction_date": "2026-08-10", "currency": "USD"},
+    {"profile": 0, "description": "Fictional travel purchase", "amount": "1800.00", "category": "Travel", "transaction_type": "expense", "transaction_date": "2026-08-14", "currency": "INR"},
+    {"profile": 0, "description": "Fictional salary", "amount": "4200.00", "category": "Salary", "transaction_type": "income", "transaction_date": "2026-09-03", "currency": "USD"},
+    {"profile": 0, "description": "Fictional apartment rent", "amount": "1250.00", "category": "Housing", "transaction_type": "expense", "transaction_date": "2026-09-04", "currency": "USD"},
+    {"profile": 0, "description": "Fictional groceries", "amount": "162.20", "category": "Food", "transaction_type": "expense", "transaction_date": "2026-09-11", "currency": "USD"},
+    {"profile": 0, "description": "Fictional cafe visit", "amount": "45.00", "category": "Food", "transaction_type": "expense", "transaction_date": "2026-09-15", "currency": "AED"},
+    {"profile": 0, "description": "Fictional salary", "amount": "4300.00", "category": "Salary", "transaction_type": "income", "transaction_date": "2026-10-02", "currency": "USD"},
+    {"profile": 0, "description": "Fictional apartment rent", "amount": "1250.00", "category": "Housing", "transaction_type": "expense", "transaction_date": "2026-10-05", "currency": "USD"},
+    {"profile": 0, "description": "Fictional groceries", "amount": "148.90", "category": "Food", "transaction_type": "expense", "transaction_date": "2026-10-09", "currency": "USD"},
+    {"profile": 0, "description": "Fictional transit pass", "amount": "60.00", "category": "Transport", "transaction_type": "expense", "transaction_date": "2026-10-12", "currency": "USD"},
+    {"profile": 1, "description": "Fictional design commission", "amount": "18000.00", "category": "Freelance", "transaction_type": "income", "transaction_date": "2026-09-08", "currency": "INR"},
+    {"profile": 1, "description": "Fictional software subscription", "amount": "24.00", "category": "Software", "transaction_type": "expense", "transaction_date": "2026-09-10", "currency": "USD"},
+    {"profile": 1, "description": "Fictional design commission", "amount": "22000.00", "category": "Freelance", "transaction_type": "income", "transaction_date": "2026-10-08", "currency": "INR"},
+    {"profile": 1, "description": "Fictional stationery", "amount": "80.00", "category": "Office", "transaction_type": "expense", "transaction_date": "2026-10-14", "currency": "AED"},
+    {"profile": 2, "description": "Fictional archived project payment", "amount": "300.00", "category": "Freelance", "transaction_type": "income", "transaction_date": "2026-08-12", "currency": "USD"}
+  ]
+}
