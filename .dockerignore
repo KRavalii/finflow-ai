@@ -13,6 +13,8 @@
 **/*.dump
 **/*.sql
 **/*.pem
+**/*.crt
+**/*.cer
 **/*.key
 **/credentials*
 **/*credentials*.json

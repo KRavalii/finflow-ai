@@ -1,10 +1,205 @@
 # Public-demo deployment guide
 
-Preparation only: these instructions have not been executed against a hosted
-database or hosting account. Do not reuse or migrate the existing local
-`finflow_db`. Do not upload backups, real records, or `backend/.env`.
+## Current status (November 16, 2026)
 
-## Recommended free-tier layout
+The separate Supabase cloud demo is initialized at revision `0003`, with three
+profiles and 17 fictional transactions. The `finflow_reader` login was created
+and verified through a separate TLS-verified session-pooler connection. It can
+SELECT only the three FinFlow tables, has no effective persistent-data write,
+permanent creation, administration, ownership, membership, sequence, or sensitive
+schema privileges, and retains inherited TEMPORARY permission as approved.
+Shared PUBLIC permissions and existing roles were not changed.
+
+Local production-mode API checks using that runtime role passed: health,
+readiness, profiles (including archived), transactions, historical summaries,
+exchange rates, assistant, representative CORS checks, and 403 write protection.
+These checks do not establish hosted Render/Vercel behavior or the final CORS origin.
+
+Render service creation, credential transfer, repository publication, and deployment
+have not been performed and require separate approval. Do not reuse or migrate
+the existing local `finflow_db`. Do not upload backups, real records, or
+`backend/.env`. The database setup instructions below are for a NEW project;
+**do not rerun initialization or role creation against the existing demo**.
+
+## Primary layout: Supabase, Render, then Vercel
+
+All resource creation, cloud initialization, commit/push, and deployments require
+separate owner approval. The configuration files are preparation, not deployment.
+The public production launcher requires read-only demo mode. Local mode remains
+editable and uses the existing `.env`; do not overwrite it with production values.
+
+### 1. Supabase: dedicated fictional demo project
+
+1. After approval, create a **new dedicated Supabase project**, near the intended
+   Render region. The database is `postgres`; naming the project `finflow_demo`
+   does not rename its database. Never use a project containing personal data.
+2. Disable the unused Data API for this project. FastAPI connects to PostgreSQL
+   directly; no Supabase client, publishable key, or service-role key is needed.
+3. Copy the actual **Session pooler** connection parameters from Connect. Use
+   port `5432`, not transaction-pooler port `6543`. Copy the pooler hostname;
+   do not infer it from the region. The setup username is `postgres.<project-ref>`;
+   the later runtime username is `finflow_reader.<project-ref>`.
+4. Obtain the trusted database CA certificate if system roots do not verify the
+   endpoint. Keep `sslmode=verify-full`; do not weaken certificate verification.
+   A direct `db.<project-ref>.supabase.co:5432` connection is also accepted when
+   the setup machine has the required IPv6 access (or project IPv4 support).
+5. In a fresh PowerShell setup session, securely enter the **cloud-only** setup
+   URL below. URL-encode reserved password characters. Never put the real URL
+   in command arguments, shell history, chat, a tracked file, or frontend variables.
+
+Placeholder shape only:
+
+```text
+postgresql+psycopg://postgres.<project-ref>:<encoded-setup-password>@<session-pooler-host>:5432/postgres?sslmode=verify-full&sslrootcert=<trusted-CA-path-or-system>
+```
+
+From the repository root, **only after cloud database initialization approval**:
+
+```powershell
+cd backend
+$demoCloudUrl = Read-Host 'Dedicated Supabase demo setup URL' -AsSecureString
+$env:DEMO_DATABASE_URL = [System.Net.NetworkCredential]::new('', $demoCloudUrl).Password
+try {
+    .\.venv\Scripts\python.exe -B prepare_demo.py --confirm-database postgres --confirm-supabase-project <project-ref>
+    if ($LASTEXITCODE -ne 0) { throw 'Demo initialization refused or failed.' }
+} finally {
+    Remove-Item Env:DEMO_DATABASE_URL -ErrorAction SilentlyContinue
+    Remove-Variable demoCloudUrl -ErrorAction SilentlyContinue
+}
+```
+
+Replace `<project-ref>` with the exact 20-character lowercase project reference.
+The URL is held in the process environment for this command, not echoed. The
+initializer reads **only** `DEMO_DATABASE_URL`, never local `DB_*` or `.env`.
+It matches the confirmed database and project to the TLS hostname (and pooler
+username), checks `current_database()`, refuses any existing public tables,
+then migrates and seeds in one transaction. It never resets a database.
+For a refusal, inspect the target and permissions; do not clear existing tables.
+
+Migration chain: `0001` transactions -> `0002` original currencies -> `0003`
+profiles. The initializer inserts 17 fictional transactions across three profiles
+from `backend/demo_data.json`. Do not run `alembic upgrade head` separately first:
+the initializer requires an empty public schema. Never run ordinary Alembic
+commands with the local `.env` to initialize the cloud project. No migration
+or seed runs during application build or startup.
+
+6. Using the provider's secure role tooling, create a login `finflow_reader`
+   with its own password, no owner membership and no elevated role attributes.
+   Grant only CONNECT on `postgres`, USAGE on `public`, and SELECT on
+   `public.profiles`, `public.transactions`, and `public.alembic_version`.
+   Verify effective permissions: no schema CREATE, INSERT, UPDATE, DELETE,
+   TRUNCATE, sequence access, ownership, or inherited writable membership.
+   `default_transaction_read_only=on` is useful defense in depth. A read-only
+   default alone is not a substitute for restricted grants. Keep setup credentials
+   out of the Render service.
+
+   For the existing demo, this role is already verified. Shared TEMPORARY remains
+   inherited; do not revoke shared PUBLIC grants. The read-only guarantee applies
+   to persistent FinFlow data and does not remove temporary-table permission.
+
+### 2. Render: native Python backend
+
+After approved repository publication, create a Python Web Service with:
+
+| Setting | Value |
+| --- | --- |
+| Root directory | `backend` |
+| Build command | `python -m pip install -r requirements.lock` |
+| Start command | `python run_prod.py` |
+| Health check | `/api/readiness` |
+| Auto-deploy | Disable if each release requires approval |
+
+Use the native Python runtime, not the root Dockerfile, for this split layout.
+Production startup requires the exact runtime username: `finflow_reader.<project-ref>`
+for Supabase session pooling, or `finflow_reader` for direct/other hosting.
+Administrator accounts and other usernames are rejected before serving requests.
+This guard does not change development settings or the explicit setup initializer.
+Configure these values in Render's environment/secrets UI, not a committed file:
+
+```dotenv
+PYTHON_VERSION=3.13.5
+APP_ENV=production
+FINFLOW_DEMO_MODE=true
+FINFLOW_SERVE_FRONTEND=false
+FINFLOW_SUPABASE_PROJECT_REF=<project-ref>
+DB_HOST=<copied-session-pooler-host>
+DB_PORT=5432
+DB_NAME=postgres
+DB_USER=finflow_reader.<project-ref>
+DB_PASSWORD=<read-only-runtime-password>
+DB_SSLMODE=verify-full
+DB_SSLROOTCERT=/etc/secrets/supabase-ca.crt
+CORS_ORIGINS=https://<frontend-project>.vercel.app
+```
+
+Upload the same trusted CA that passed local verification as Render Secret File
+`supabase-ca.crt`, available at `/etc/secrets/supabase-ca.crt`. System trust failed
+in the earlier local check; retain the verified CA and `sslmode=verify-full`.
+Keep certificate files outside the repository. Git/Docker ignore rules also
+exclude `.pem`, `.crt`, and `.cer` files and the private `.runtime` directory.
+Do not upload backend/.env. Render supplies
+`PORT`; the production launcher binds `0.0.0.0` on that port without reload.
+If the final Vercel origin is unknown, leave CORS empty for the initial API checks
+and update it in step 3 before testing the browser. No wildcard is permitted.
+The Supabase project reference is explicit target confirmation, not a secret.
+
+The runtime password is stored locally only in
+`backend/.runtime/finflow_reader.password.dpapi`, encrypted with Windows DPAPI
+for the current Windows user. It cannot be used directly by a Linux cloud host.
+After separate credential-transfer approval, a local helper can decrypt it only
+in memory and send it directly over verified HTTPS to Render's environment API
+as `DB_PASSWORD`, using a Render API token entered through masked private input.
+Do not print request/response bodies, authorization headers, passwords, or tokens;
+report status only. Do not export a plaintext `.env`, use the clipboard, upload
+the DPAPI file, or include credentials in shell arguments, Git, or chat. Transfer
+tooling has not been executed or authorized by local preparation approval.
+
+Require HTTP 200 from `/api/health` and `/api/readiness`; readiness must report
+`demo_mode: true`. `/api/config` must return `{"demo_mode":true}`. Check
+`/api/summary` and a historical exchange-rate request. Allow outbound HTTPS to
+`api.frankfurter.dev`; failed rates intentionally hide totals with a 503 rather
+than inventing data. The Axios timeout is 15 seconds; sleeping services can
+require warming the API and retrying the first frontend request.
+
+### 3. Vercel: React/TypeScript frontend
+
+After deployment approval, import the approved repository revision:
+
+| Setting | Value |
+| --- | --- |
+| Framework | Vite |
+| Root directory | `frontend` |
+| Node | Node 22.15.1+ on the 22 line, or Node 24 |
+| Install command | `npm ci` |
+| Build command | `npm run build` |
+| Output directory | `dist` |
+
+Set `VITE_API_BASE_URL=https://<render-service>.onrender.com/api` and
+`VITE_DEMO_MODE=true` before the production build. These are public build-time
+values; rebuild after changes. Never add database credentials or Supabase keys.
+`frontend/vercel.json` supplies the SPA fallback for direct page navigation.
+`API_PROXY_TARGET` is only for Vite dev/preview, not production.
+
+Set Render `CORS_ORIGINS` to the actual stable Vercel HTTPS origin with **no
+trailing slash**. Multiple explicitly approved origins can be comma-separated;
+preview URLs are not automatically allowed. Apply the Render environment update,
+then test from the real production frontend. CORS is not authentication.
+
+Before sharing, follow the verification checklist below, including all currencies,
+the assistant, direct SPA routes, and server-side 403 write protection. Do not
+perform write probes against the editable local server. Confirm the production
+link works signed out. The stable Vercel URL is the link for LinkedIn and the README.
+Choose All time or August-October 2026 for the fixed fictional fixtures; relative
+date questions may legitimately find no records. Review current hosting quotas
+and plan terms; no free-tier availability or performance guarantee is implied.
+
+Provider references: [Supabase connections](https://supabase.com/docs/guides/database/connecting-to-postgres),
+[Supabase API security](https://supabase.com/docs/guides/database/secure-data),
+[Render Python versions](https://render.com/docs/python-version),
+[Render FastAPI](https://render.com/docs/deploy-fastapi),
+[Vercel Vite/SPA routing](https://vercel.com/docs/frameworks/frontend/vite).
+
+## Alternative: existing finflow_demo database and combined Docker hosting
 
 Use an external Neon Free PostgreSQL project with a **new database named
 `finflow_demo`**, plus one Render Free Docker web service. The Docker image builds
@@ -19,7 +214,7 @@ Cold starts can delay the first visit. Render's own free PostgreSQL expires afte
 terms and keep free plans/usage caps selected; this guide does not guarantee
 unlimited hosting or create any accounts/resources.
 
-## 1. Initialize ONLY the new fictional demo database
+### Initialize ONLY a new fictional finflow_demo database
 
 Create `finflow_demo` in a separate project, with an owner/setup role. Use the
 provider's direct database endpoint for initialization. Put a URL in the
@@ -63,7 +258,7 @@ verify effective privileges. `default_transaction_read_only=on` for the runtime
 role is useful defense in depth. All API reads and the assistant work without
 write privileges.
 
-## 2. Same-origin production build (recommended)
+### Same-origin production build
 
 The root Dockerfile uses Node 22 to run `npm ci` and build the frontend with
 `VITE_DEMO_MODE=true` and `VITE_API_BASE_URL=/api`. Its final non-root Python 3.13
@@ -83,7 +278,7 @@ CORS_ORIGINS=
 DB_HOST=<provider-host>
 DB_PORT=5432
 DB_NAME=finflow_demo
-DB_USER=<read-only-runtime-user>
+DB_USER=finflow_reader
 DB_PASSWORD=<runtime-password>
 DB_SSLMODE=verify-full
 DB_SSLROOTCERT=system
@@ -104,7 +299,7 @@ docker build -t finflow-demo .
 Run only with separate demo secrets supplied securely. Starting the image without
 the required demo settings fails; it never initializes a database.
 
-## 3. Alternative: separate React/Vite and FastAPI hosts
+### Other separate React/Vite and FastAPI hosts
 
 For a static frontend host such as Render Static Sites:
 
@@ -160,10 +355,13 @@ provider's routing documentation before selecting this alternative.
 
 ## Known limits and next steps
 
-No hosting account, hosted DB, migration, seeding, push, or deployment has been
-performed as part of preparation. Hosted PostgreSQL setup, effective read-only
-role permissions, Docker/Linux build, TLS, CORS, egress, and free-tier behavior
-must be validated on the chosen host. Local unit tests do not establish these.
+The hosted database, migrations, fictional seed, and runtime role are complete
+and locally verified. No repository publication, Render service creation,
+credential transfer, or application deployment has been performed. Docker/Linux
+build, Render-to-Supabase TLS and egress, actual frontend CORS, HTTPS health checks,
+and free-tier behavior still require validation on the chosen hosts. Local tests
+do not establish these. Production enforces the runtime username, but effective
+database permissions must continue to be checked when roles or grants change.
 Caches are in memory per worker and reset on cold starts. No background job,
 external LLM credential, or persistent local disk is needed.
 

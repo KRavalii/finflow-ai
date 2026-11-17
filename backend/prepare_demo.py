@@ -1,4 +1,4 @@
-"""Explicit one-time setup of a NEW, empty finflow_demo PostgreSQL database only.
+"""Explicit one-time setup of a NEW, empty public-demo PostgreSQL target only.
 
 Never reads backend/.env or DB_* variables. No drop, reset, or overwrite path.
 """
@@ -14,16 +14,27 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import make_url
 
+from app.demo_target import validate_demo_target
 
-def validate_target(raw_url, confirmation):
-    if not raw_url or confirmation != 'finflow_demo':
-        raise ValueError('Set DEMO_DATABASE_URL and pass --confirm-database finflow_demo.')
+
+def validate_target(raw_url, confirmation, project_ref=None):
+    if not raw_url or confirmation not in {'finflow_demo', 'postgres'}:
+        raise ValueError('Set DEMO_DATABASE_URL and explicitly confirm the database.')
     url = make_url(raw_url)
-    if url.get_backend_name() not in {'postgres', 'postgresql'} or url.database != 'finflow_demo':
-        raise ValueError('Only a separate PostgreSQL database named finflow_demo is allowed.')
+    if url.get_backend_name() not in {'postgres', 'postgresql'} or url.database != confirmation:
+        raise ValueError('Unexpected PostgreSQL database target.')
+    validate_demo_target(url.database, url.host, url.username, url.port, project_ref)
+    # Prevent libpq query parameters from overriding the validated target.
+    if set(url.query) - {'sslmode', 'sslrootcert'}:
+        raise ValueError('Only TLS query parameters are accepted.')
     if url.query.get('sslmode') != 'verify-full':
         raise ValueError('DEMO_DATABASE_URL must include sslmode=verify-full and a trusted root certificate.')
     return url.set(drivername='postgresql+psycopg')
+
+
+def verify_connected_database(connection, expected_name):
+    if connection.execute(text('SELECT current_database()')).scalar_one() != expected_name:
+        raise ValueError('Unexpected connected database target.')
 
 
 def initialize(connection):
@@ -56,13 +67,14 @@ def initialize(connection):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--confirm-database', required=True)
+    parser.add_argument('--confirm-supabase-project', help='Dedicated demo project reference; required for postgres.')
     args = parser.parse_args()
     try:
-        target = validate_target(os.environ.get('DEMO_DATABASE_URL'), args.confirm_database)
+        target = validate_target(os.environ.get('DEMO_DATABASE_URL'), args.confirm_database,
+                                 args.confirm_supabase_project)
         engine = create_engine(target, hide_parameters=True, connect_args={'connect_timeout': 5})
         with engine.begin() as connection:
-            if connection.execute(text('SELECT current_database()')).scalar_one() != 'finflow_demo':
-                raise ValueError('Unexpected database target.')
+            verify_connected_database(connection, target.database)
             initialize(connection)
         engine.dispose()
     except Exception:

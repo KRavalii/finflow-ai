@@ -7,6 +7,8 @@ from dotenv import dotenv_values
 from pydantic import BaseModel, Field, SecretStr
 from sqlalchemy import URL
 
+from .demo_target import validate_demo_target
+
 
 def environment_values():
     return {**dotenv_values(Path(__file__).resolve().parents[1] / ".env"), **os.environ}
@@ -37,12 +39,15 @@ def get_runtime_settings() -> RuntimeSettings:
         if settings.environment == 'production' and not settings.demo_mode:
             raise ValueError()
         # Public mode cannot accidentally expose this checkout's existing database.
-        if settings.demo_mode and values.get('DB_NAME') != 'finflow_demo':
-            raise ValueError()
+        if settings.demo_mode:
+            validate_demo_target(values.get('DB_NAME'), values.get('DB_HOST'),
+                                 values.get('DB_USER'), values.get('DB_PORT'),
+                                 values.get('FINFLOW_SUPABASE_PROJECT_REF'))
         return settings
     except (ValueError, TypeError):
         raise RuntimeError('Invalid runtime configuration. Production requires FINFLOW_DEMO_MODE=true; '
-                           'demo mode requires DB_NAME=finflow_demo; CORS origins must be explicit '
+                           'demo mode requires finflow_demo or an explicitly confirmed Supabase target; '
+                           'CORS origins must be explicit '
                            'origins (HTTPS in production), without trailing slashes.') from None
 
 
@@ -72,10 +77,18 @@ def get_settings() -> Settings:
                             password=values["DB_PASSWORD"],
                             sslmode=values.get('DB_SSLMODE', 'verify-full' if runtime.environment == 'production' else 'prefer'),
                             sslrootcert=values.get('DB_SSLROOTCERT') or ('system' if runtime.environment == 'production' else None))
-        if runtime.environment == 'production' and settings.sslmode != 'verify-full':
+        if (runtime.environment == 'production' or (runtime.demo_mode and settings.name == 'postgres')) and settings.sslmode != 'verify-full':
             raise ValueError()
+        if runtime.environment == 'production':
+            expected_user = 'finflow_reader'
+            if settings.name == 'postgres' and settings.host.endswith('.pooler.supabase.com'):
+                expected_user += '.' + values['FINFLOW_SUPABASE_PROJECT_REF']
+            if settings.user != expected_user:
+                raise ValueError()
         if not all((settings.host, settings.name, settings.user, settings.password.get_secret_value())):
             raise ValueError()
         return settings
     except (KeyError, ValueError, TypeError):
-        raise RuntimeError("Invalid database configuration. Check backend/.env DB_* settings.") from None
+        raise RuntimeError('Invalid database configuration. Check DB_* settings. '
+                           'Production requires the finflow_reader runtime user '
+                           '(with the confirmed project suffix for Supabase session pooling).') from None

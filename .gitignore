@@ -25,6 +25,8 @@ build/
 *.sql
 *.bak
 *.pem
+*.crt
+*.cer
 *.key
 credentials*
 *credentials*.json

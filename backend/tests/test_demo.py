@@ -99,7 +99,7 @@ def test_invalid_production_configuration_fails_closed(monkeypatch, changes):
 
 def test_production_requires_verified_tls(monkeypatch):
     values = dict(APP_ENV='production', FINFLOW_DEMO_MODE='true', DB_NAME='finflow_demo',
-                  DB_HOST='db.example', DB_PORT='5432', DB_USER='placeholder', DB_PASSWORD='placeholder')
+                  DB_HOST='db.example', DB_PORT='5432', DB_USER='finflow_reader', DB_PASSWORD='placeholder')
     monkeypatch.setattr(config, 'environment_values', lambda: values)
     assert config.get_settings().database_url.query['sslmode'] == 'verify-full'
     values['DB_SSLMODE'] = 'require'
@@ -116,6 +116,120 @@ def test_production_requires_verified_tls(monkeypatch):
 def test_initializer_rejects_unsafe_targets(url, confirmation):
     with pytest.raises(ValueError):
         prepare_demo.validate_target(url, confirmation)
+
+
+PROJECT_REF = 'abcdefghijklmnopqrst'
+OTHER_REF = 'zyxwvutsrqponmlkjihg'
+POOLER_HOST = 'aws-0-us-east-1.pooler.supabase.com'
+
+
+def supabase_values(**changes):
+    return dict(APP_ENV='production', FINFLOW_DEMO_MODE='true', DB_NAME='postgres',
+                DB_HOST=POOLER_HOST, DB_PORT='5432', DB_USER=f'finflow_reader.{PROJECT_REF}',
+                DB_PASSWORD='test-only', FINFLOW_SUPABASE_PROJECT_REF=PROJECT_REF,
+                DB_SSLMODE='verify-full', **changes)
+
+
+@pytest.mark.parametrize('host,user', [
+    (POOLER_HOST, f'finflow_reader.{PROJECT_REF}'),
+    (f'db.{PROJECT_REF}.supabase.co', 'finflow_reader'),
+])
+def test_confirmed_supabase_runtime_and_initializer_agree(monkeypatch, host, user):
+    values = supabase_values()
+    values.update(DB_HOST=host, DB_USER=user)
+    monkeypatch.setattr(config, 'environment_values', lambda: values)
+    assert config.get_runtime_settings().demo_mode
+    assert config.get_settings().name == 'postgres'
+    raw = f'postgresql://{user}:test-only@{host}:5432/postgres?sslmode=verify-full'
+    assert prepare_demo.validate_target(raw, 'postgres', PROJECT_REF).database == 'postgres'
+
+
+@pytest.mark.parametrize('host,user', [
+    (POOLER_HOST, f'postgres.{PROJECT_REF}'),
+    (POOLER_HOST, f'another_reader.{PROJECT_REF}'),
+    (POOLER_HOST, 'finflow_reader'),
+    (f'db.{PROJECT_REF}.supabase.co', 'postgres'),
+    (f'db.{PROJECT_REF}.supabase.co', f'finflow_reader.{PROJECT_REF}'),
+])
+def test_production_refuses_non_runtime_database_users_before_startup(monkeypatch, host, user):
+    values = supabase_values()
+    values.update(DB_HOST=host, DB_USER=user)
+    monkeypatch.setattr(config, 'environment_values', lambda: values)
+    with pytest.raises(RuntimeError):
+        create_app()
+
+
+@pytest.mark.parametrize('user', ['postgres', 'another_reader'])
+def test_other_production_hosting_also_requires_runtime_user(monkeypatch, user):
+    values = dict(APP_ENV='production', FINFLOW_DEMO_MODE='true', DB_NAME='finflow_demo',
+                  DB_HOST='db.example', DB_PORT='5432', DB_USER=user, DB_PASSWORD='test-only',
+                  DB_SSLMODE='verify-full')
+    monkeypatch.setattr(config, 'environment_values', lambda: values)
+    with pytest.raises(RuntimeError, match='finflow_reader'):
+        config.get_settings()
+
+
+@pytest.mark.parametrize('demo_mode,name,host,user', [
+    ('false', 'finflow_db', 'localhost', 'postgres'),
+    ('true', 'postgres', POOLER_HOST, f'postgres.{PROJECT_REF}'),
+])
+def test_development_and_explicit_setup_targets_keep_existing_user_behavior(monkeypatch, demo_mode, name, host, user):
+    values = supabase_values()
+    values.update(APP_ENV='development', FINFLOW_DEMO_MODE=demo_mode,
+                  DB_NAME=name, DB_HOST=host, DB_USER=user)
+    monkeypatch.setattr(config, 'environment_values', lambda: values)
+    assert config.get_settings().user == user
+    cloud_setup = f'postgresql://postgres.{PROJECT_REF}:test-only@{POOLER_HOST}:5432/postgres?sslmode=verify-full'
+    assert prepare_demo.validate_target(cloud_setup, 'postgres', PROJECT_REF).username == f'postgres.{PROJECT_REF}'
+
+
+@pytest.mark.parametrize('changes', [
+    {'FINFLOW_SUPABASE_PROJECT_REF': None},
+    {'FINFLOW_SUPABASE_PROJECT_REF': 'not-a-project'},
+    {'DB_NAME': 'finflow_db'},
+    {'DB_HOST': 'localhost'},
+    {'DB_HOST': '127.0.0.1'},
+    {'DB_HOST': f'db.{OTHER_REF}.supabase.co'},
+    {'DB_HOST': f'db.{PROJECT_REF}.supabase.co.evil.example'},
+    {'DB_USER': f'finflow_reader.{OTHER_REF}'},
+    {'DB_PORT': '6543'},
+    {'DB_SSLMODE': 'require'},
+])
+def test_supabase_runtime_rejects_unsafe_configuration(monkeypatch, changes):
+    values = supabase_values()
+    values.update(changes)
+    monkeypatch.setattr(config, 'environment_values', lambda: values)
+    with pytest.raises(RuntimeError):
+        config.get_settings()
+
+
+@pytest.mark.parametrize('host,user,port,name,ref,extra', [
+    (POOLER_HOST, f'postgres.{PROJECT_REF}', 5432, 'postgres', None, ''),
+    ('localhost', 'postgres', 5432, 'postgres', PROJECT_REF, ''),
+    (f'db.{OTHER_REF}.supabase.co', 'postgres', 5432, 'postgres', PROJECT_REF, ''),
+    (POOLER_HOST, f'postgres.{OTHER_REF}', 5432, 'postgres', PROJECT_REF, ''),
+    (POOLER_HOST, f'postgres.{PROJECT_REF}', 6543, 'postgres', PROJECT_REF, ''),
+    (POOLER_HOST, f'postgres.{PROJECT_REF}', 5432, 'finflow_db', PROJECT_REF, ''),
+    (POOLER_HOST, f'postgres.{PROJECT_REF}', 5432, 'postgres', PROJECT_REF, '&host=localhost'),
+    (POOLER_HOST, f'postgres.{PROJECT_REF}', 5432, 'postgres', PROJECT_REF, '&hostaddr=127.0.0.1'),
+    (POOLER_HOST, f'postgres.{PROJECT_REF}', 5432, 'postgres', PROJECT_REF, '&dbname=finflow_db'),
+])
+def test_supabase_initializer_rejects_unconfirmed_or_overridden_targets(host, user, port, name, ref, extra):
+    raw = f'postgresql://{user}:test-only@{host}:{port}/{name}?sslmode=verify-full{extra}'
+    with pytest.raises(ValueError):
+        prepare_demo.validate_target(raw, 'postgres', ref)
+
+
+def test_existing_finflow_demo_initializer_still_works():
+    target = prepare_demo.validate_target(
+        'postgresql://setup:test-only@db.example/finflow_demo?sslmode=verify-full', 'finflow_demo')
+    assert target.database == 'finflow_demo'
+
+
+def test_initializer_checks_actual_database_before_initializing():
+    connection = SimpleNamespace(execute=lambda query: SimpleNamespace(scalar_one=lambda: 'finflow_db'))
+    with pytest.raises(ValueError):
+        prepare_demo.verify_connected_database(connection, 'postgres')
 
 
 def test_initializer_refuses_existing_database_before_migrations(monkeypatch):

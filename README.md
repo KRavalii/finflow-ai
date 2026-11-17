@@ -115,7 +115,8 @@ file. Production examples are templates, not automatically loaded files.
 | --- | --- |
 | `APP_ENV` | `development` locally; production launcher forces `production`. |
 | `FINFLOW_DEMO_MODE` | Server write guard; defaults to `false` locally and is required `true` in production. |
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Server-only PostgreSQL configuration. Public demo requires `DB_NAME=finflow_demo`. |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Server-only PostgreSQL configuration. Demo accepts `finflow_demo`, or `postgres` in an explicitly confirmed dedicated Supabase project. |
+| `FINFLOW_SUPABASE_PROJECT_REF` | Required for Supabase demo `postgres`; matches the direct hostname or session-pooler username. Port 5432 and verified TLS are required. Omit for existing `finflow_demo` hosting. |
 | `DB_SSLMODE`, `DB_SSLROOTCERT` | Production requires `verify-full`; system roots or a provider CA certificate. Existing local settings retain the previous `prefer` default. |
 | `CORS_ORIGINS` | Comma-separated exact origins, without trailing slashes; HTTPS only in production. Empty for same-origin hosting. No wildcard origins. |
 | `FINFLOW_SERVE_FRONTEND` | Serve built `frontend/dist` and SPA routes from FastAPI when `true`. |
@@ -135,8 +136,9 @@ demo mode is off. Profiles are not accounts or authorization boundaries.
 
 ## Deployment and repository preparation
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for a free-tier setup, isolated fictional seed
-data, same-origin Docker hosting, separate static hosting, TLS, and smoke checks.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the Supabase -> Render -> Vercel setup,
+isolated fictional seed data, verified TLS, CORS, and smoke checks. Cloud setup
+and deployment require separate approval. Same-origin Docker hosting remains an alternative.
 The Docker image serves React/Vite assets and FastAPI together; PostgreSQL remains
 external. No build or startup command migrates or initializes any database.
 

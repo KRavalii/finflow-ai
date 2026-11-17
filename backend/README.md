@@ -1,6 +1,6 @@
 # Deployment status
 
-See the [root README](../README.md) and [deployment guide](../DEPLOYMENT.md) for current setup. Public production mode requires a separate `finflow_demo` database, verified database TLS, and server-side read-only mode. The existing local database is at revision `0003`. The phase notes below retain implementation history; no startup command applies migrations.
+See the [root README](../README.md) and [deployment guide](../DEPLOYMENT.md) for current setup. Public production mode requires an isolated fictional demo database (`finflow_demo`, or Supabase `postgres` with explicit project confirmation), verified database TLS, and server-side read-only mode. Render uses `python run_prod.py` from `backend`; no startup command applies migrations. The existing local database is at revision `0003`. The phase notes below retain implementation history.
 
 # FinFlow AI backend
 
