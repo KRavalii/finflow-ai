@@ -1,13 +1,14 @@
 import os
+import logging
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
 from dotenv import dotenv_values
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, ValidationError
 from sqlalchemy import URL
 
-from .demo_target import validate_demo_target
+from .demo_target import DemoTargetError, validate_demo_target
 
 
 def environment_values():
@@ -23,6 +24,7 @@ class RuntimeSettings(BaseModel):
 
 def get_runtime_settings() -> RuntimeSettings:
     values = environment_values()
+    condition = 'runtime_fields_invalid'
     try:
         settings = RuntimeSettings(
             environment=values.get('APP_ENV', 'development'),
@@ -30,21 +32,37 @@ def get_runtime_settings() -> RuntimeSettings:
             cors_origins=[item.strip() for item in values.get('CORS_ORIGINS', '').split(',') if item.strip()],
             serve_frontend=values.get('FINFLOW_SERVE_FRONTEND', 'false'),
         )
+        condition = 'cors_origin_invalid'
         for origin in settings.cors_origins:
             parsed = urlsplit(origin)
             if (parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.path
                     or parsed.query or parsed.fragment or parsed.username or parsed.password
                     or '*' in origin or (settings.environment == 'production' and parsed.scheme != 'https')):
                 raise ValueError()
+        condition = 'production_demo_mode_required'
         if settings.environment == 'production' and not settings.demo_mode:
             raise ValueError()
         # Public mode cannot accidentally expose this checkout's existing database.
+        condition = 'demo_target_invalid'
         if settings.demo_mode:
             validate_demo_target(values.get('DB_NAME'), values.get('DB_HOST'),
                                  values.get('DB_USER'), values.get('DB_PORT'),
                                  values.get('FINFLOW_SUPABASE_PROJECT_REF'))
         return settings
-    except (ValueError, TypeError):
+    except (ValueError, TypeError) as exc:
+        if isinstance(exc, DemoTargetError):
+            # Only this module's fixed codes are logged, never generic exception text.
+            allowed = {'demo_database_name_invalid', 'supabase_project_ref_invalid',
+                       'supabase_port_invalid', 'supabase_pooler_username_project_mismatch',
+                       'supabase_direct_username_missing', 'supabase_host_or_project_mismatch'}
+            condition = exc.args[0] if exc.args and exc.args[0] in allowed else 'demo_target_invalid'
+        elif isinstance(exc, ValidationError):
+            fields = {error['loc'][0] for error in exc.errors(include_input=False) if error['loc']}
+            condition = next((code for field, code in (
+                ('environment', 'app_env_invalid'), ('demo_mode', 'demo_mode_invalid'),
+                ('serve_frontend', 'serve_frontend_invalid'),
+            ) if field in fields), 'runtime_fields_invalid')
+        logging.getLogger('uvicorn.error').error('runtime_configuration_invalid condition=%s', condition)
         raise RuntimeError('Invalid runtime configuration. Production requires FINFLOW_DEMO_MODE=true; '
                            'demo mode requires finflow_demo or an explicitly confirmed Supabase target; '
                            'CORS origins must be explicit '
