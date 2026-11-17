@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_runtime_settings, get_settings
 from .database import get_db
+from .db_diagnostics import log_database_failure
 from .transactions import router
 from .financial_routes import router as financial_router
 from .exchange_rates import RatesUnavailable
@@ -46,6 +47,7 @@ def create_app(runtime=None):
 
     @application.exception_handler(SQLAlchemyError)
     async def database_error_handler(request, exc):
+        log_database_failure(exc, getattr(request.state, 'database_stage', 'operation'))
         return JSONResponse(status_code=503, content={"detail": "Database operation unavailable"})
 
     @application.get('/healthz', include_in_schema=False)
@@ -54,8 +56,12 @@ def create_app(runtime=None):
         return {"status": "healthy", "service": "FinFlow AI Backend"}
 
     @application.get('/api/readiness')
-    def readiness(db: Session = Depends(get_db)):
+    def readiness(request: Request, db: Session = Depends(get_db)):
+        request.state.database_stage = 'connect'
+        db.connection()  # Separate connection/TLS/authentication failures from SQL failures.
+        request.state.database_stage = 'readiness_probe'
         db.execute(text('SELECT 1'))
+        request.state.database_stage = 'schema_revision'
         revision = db.execute(text('SELECT version_num FROM alembic_version')).scalars().all()
         if revision != ['0003']:
             raise HTTPException(503, 'Database requires schema revision 0003')
