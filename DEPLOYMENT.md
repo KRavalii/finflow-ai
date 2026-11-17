@@ -155,8 +155,10 @@ the DPAPI file, or include credentials in shell arguments, Git, or chat. Transfe
 tooling has not been executed or authorized by local preparation approval.
 
 Require HTTP 200 from `/api/health` and `/api/readiness`; readiness must report
-`demo_mode: true`. `/api/config` must return `{"demo_mode":true}`. Check
-`/api/summary` and a historical exchange-rate request. Allow outbound HTTPS to
+`demo_mode: true`. `/api/config` must return `{"demo_mode":true}`.
+`/healthz` is also available as a liveness alias; keep Render's health check at
+`/api/readiness` to verify database connectivity and schema revision.
+Check `/api/summary` and a historical exchange-rate request. Allow outbound HTTPS to
 `api.frankfurter.dev`; failed rates intentionally hide totals with a 503 rather
 than inventing data. The Axios timeout is 15 seconds; sleeping services can
 require warming the API and retrying the first frontend request.

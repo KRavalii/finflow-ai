@@ -48,6 +48,7 @@ def create_app(runtime=None):
     async def database_error_handler(request, exc):
         return JSONResponse(status_code=503, content={"detail": "Database operation unavailable"})
 
+    @application.get('/healthz', include_in_schema=False)
     @application.get('/api/health')
     def health_check():
         return {"status": "healthy", "service": "FinFlow AI Backend"}

@@ -61,7 +61,7 @@ def test_demo_blocks_unsafe_requests_before_database_access(demo, method, path):
 def test_demo_keeps_reads_assistant_and_historical_policy(demo, monkeypatch):
     client, _, _ = demo
     monkeypatch.setattr(financial_routes, 'reporting_today', lambda: date(2026, 11, 14))
-    for path in ['/api/health', '/api/readiness', '/api/profiles', '/api/transactions', '/docs']:
+    for path in ['/healthz', '/api/health', '/api/readiness', '/api/profiles', '/api/transactions', '/docs']:
         assert client.get(path).status_code == 200
     assert client.get('/api/config').json() == {'demo_mode': True}
     response = client.get('/api/summary')
