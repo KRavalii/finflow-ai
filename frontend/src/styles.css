@@ -200,7 +200,6 @@ input::placeholder { color: #9ca594; }
 .assistant-summary > .conversion-notice { margin-left: 23px; margin-right: 23px; }
 .original-code, .converted-value { display: block; font-size: 10px; color: #617354; margin-top: 5px; white-space: normal; min-width: 100px; line-height: 1.6; }
 @media (max-width: 650px) { .top-actions .connection, .top-actions > .avatar { display: none; } .top-actions { gap: 4px; } .reporting-select select { max-width: 115px; font-size: 10px; } }
-@media (max-width: 400px) { .topbar .breadcrumb > strong { display: none; } }
 /* Supporting text remains readable against the warm white surfaces. */
 .page-heading p, .stat-top, .stat-foot, .stat-foot > span, .panel-heading p,
 .chart-legend span, .muted, .transaction-name div > span, .category-tag,
@@ -224,3 +223,23 @@ input::placeholder { color: #9ca594; }
 .profile-manager { position: absolute; right: 1rem; top: 5rem; z-index: 40; width: min(38rem, calc(100vw - 2rem)); max-height: 75vh; overflow: auto; padding: 1.5rem; box-shadow: 0 10px 40px #0002; background: white; }
 .profile-row, .profile-manager form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: end; margin: .8rem 0; }
 .profile-manager label { display: grid; gap: .3rem; }
+/* Mobile header: title, profile controls, then reporting controls. */
+@media (max-width: 650px) {
+  .topbar { position: relative; height: auto; min-height: 65px; padding: 12px 14px; flex-direction: column; align-items: stretch; gap: 10px; }
+  .topbar .breadcrumb { min-width: 0; gap: 8px; font-size: 12px; }
+  .topbar .breadcrumb > strong { display: block; min-width: 0; overflow-wrap: anywhere; }
+  .topbar .menu-toggle { width: 36px; height: 36px; }
+  .top-actions { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; width: 100%; min-width: 0; }
+  .top-actions > .reporting-select, .top-actions > .profile-management { min-width: 0; }
+  .top-actions .profile-select { grid-column: 1 / -1; }
+  .top-actions:has(> .profile-management) .profile-select, .top-actions > .profile-management { grid-column: span 3; }
+  .top-actions .currency-select { grid-column: span 2; }
+  .top-actions .policy-select { grid-column: span 3; }
+  .top-actions .reporting-select select { display: block; width: 100%; max-width: 100%; min-width: 0; min-height: 36px; padding: 6px; font-size: 11px; }
+  .top-actions > .profile-management > .button { width: 100%; min-width: 0; min-height: 36px; padding: 6px 8px; font-size: 11px; white-space: normal; }
+  .top-actions .refresh-button { width: 36px; height: 36px; justify-self: end; }
+  .topbar .profile-manager { top: calc(100% + 8px); right: 14px; left: 14px; width: auto; max-height: 60dvh; }
+  .topbar .profile-manager label { min-width: 0; max-width: 100%; }
+  .topbar .profile-manager input { width: 100%; min-width: 0; }
+  .topbar .profile-manager button { max-width: 100%; overflow-wrap: anywhere; }
+}
